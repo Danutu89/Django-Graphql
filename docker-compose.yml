@@ -1,0 +1,73 @@
+version: '3.7'
+
+networks:
+  newapp:
+    external: true
+
+services:
+  redis:
+    container_name: 'Redis'
+    image: 'docker.io/bitnami/redis:6.0-debian-10'
+    environment:
+      # ALLOW_EMPTY_PASSWORD is recommended only for development.
+      - ALLOW_EMPTY_PASSWORD=yes
+      - REDIS_DISABLE_COMMANDS=FLUSHDB,FLUSHALL
+    ports:
+      - '6379:6379'
+    volumes:
+      - 'redis_data:/bitnami/redis/data'
+    networks:
+      newapp:
+        ipv4_address: 173.10.0.3
+  postgresql:
+    container_name: 'Postgres'
+    image: 'docker.io/bitnami/postgresql:11-debian-10'
+    ports:
+      - '5432:5432'
+    volumes:
+      - 'postgresql_data:/bitnami/postgresql'
+    environment:
+      - 'ALLOW_EMPTY_PASSWORD=yes'
+    networks:
+      newapp:
+        ipv4_address: 173.10.0.2
+  api:
+    container_name: 'Django'
+    image: 'newapp-backend'
+    command: sh -c "python manage.py collectstatic --no-input && python manage.py runserver  0.0.0.0:80"
+    environment: 
+      - API_ENV=dev
+      - PORT=80
+    ports: 
+      - '5000:80'
+    working_dir: /root/api
+    volumes: 
+      - ./:/root/api:cached
+    networks: 
+      newapp:
+        ipv4_address: 173.10.0.4
+    depends_on: 
+      - redis
+      - postgresql
+  worker:
+    container_name: 'Celery'
+    image: 'newapp-backend'
+    command: sh -c "celery --app=newapp worker --concurrency=4 -l debug"
+    environment: 
+      - API_ENV=dev
+      - PORT=80
+    working_dir: /root/api
+    volumes: 
+      - ./:/root/api:cached
+    networks: 
+      newapp:
+        ipv4_address: 173.10.0.5
+    depends_on: 
+      - redis
+      - postgresql
+
+volumes:
+  redis_data:
+    driver: local
+  postgresql_data:
+    driver: local
